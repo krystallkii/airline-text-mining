@@ -131,6 +131,6 @@ tfidf_df %>% head(20) %>% ggplot(aes(x = reorder(word, tfidf), y = tfidf)) +
 ```
 
 ```{r}
-save(review.tokens, clean.review, file = "data/prepared_data.RData")
+save(review.tokens, clean.review, file = "prepared_data.RData")
 ```
 
