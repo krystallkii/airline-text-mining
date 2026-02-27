@@ -5,7 +5,7 @@ date: "2026-02-27"
 ---
 
 ```{r}
-load("data/prepared_data.RData")
+load("prepared_data.RData")
 library(tidytext)
 library(tidyverse)
 ```
