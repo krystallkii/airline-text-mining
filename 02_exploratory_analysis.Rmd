@@ -1,0 +1,66 @@
+---
+title: "Exploratory Text Analysis"
+output: html_document
+date: "2026-02-27"
+---
+
+```{r}
+load("data/prepared_data.RData")
+library(tidytext)
+library(tidyverse)
+```
+
+## Exploratory Text Analysis
+Word frequency
+```{r}
+word_freq <- review.tokens %>% count(word, sort = TRUE)
+head(word_freq, 20)
+
+word_freq %>% head(20) %>%
+  ggplot(aes(x = reorder(word, n), y = n)) +
+  geom_bar(stat = "identity", fill = "lemonchiffon3") +
+  labs(title = "Top 20 Most Frequent Words", x = "Word", y = "Count") +
+  coord_flip() + theme_minimal()
+```
+
+Word frequency by rating level
+```{r}
+review.tokens <- review.tokens %>%
+  mutate(rating_level = case_when(Overall_Rating <= 3 ~ "Low",
+                                  Overall_Rating <= 7 ~ "Medium",
+                                  Overall_Rating >= 8 ~ "High"))
+
+review.tokens %>% filter(!is.na(rating_level)) %>% 
+  mutate(rating_level = factor(rating_level, levels = c("Low", "Medium", "High"))) %>%
+  group_by(rating_level) %>% count(word, sort = TRUE) %>% slice_max(n, n = 10) %>%
+  ggplot(aes(x = reorder(word, n), y = n, fill = rating_level)) +
+  geom_bar(stat = "identity", show.legend = FALSE) +
+  facet_wrap(~ rating_level, scales = "free_y", ncol = 1) +
+  scale_fill_manual(values = c("Low" = "tomato3", "Medium" = "dodgerblue3", 
+                               "High" = "chartreuse3")) +
+  labs(title = "Top 10 Words by Rating Level", x = "Word", y = "Count") +
+  coord_flip() + theme_minimal()
+```
+
+Bigram analysis
+```{r}
+bigrams <- clean.review %>%
+  unnest_tokens(bigram, text, token = "ngrams", n = 2) %>% filter(!is.na(bigram))
+head(bigrams, 20)
+```
+
+```{r}
+bigrams_new <- bigrams %>% separate(bigram, c("word1", "word2"), sep = " ") %>%
+  filter(!word1 %in% stop_words$word, !word2 %in% stop_words$word,
+         !word1 %in% c("will", "one", "us", "get"), 
+         !word2 %in% c("will", "one", "us", "get")) %>%
+  unite(bigram, word1, word2, sep = " ")
+```
+
+```{r}
+bigrams_new %>% count(bigram, sort = TRUE) %>% head(20) %>%
+  ggplot(aes(x = reorder(bigram, n), y = n)) +
+  geom_bar(stat = "identity", fill = "plum3") +
+  labs(title = "Top 20 Bigrams", x = "Bigram", y = "Count") +
+  coord_flip() + theme_minimal()
+```

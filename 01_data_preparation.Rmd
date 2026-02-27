@@ -1,0 +1,136 @@
+---
+title: "Data Prep"
+output: html_document
+date: "2026-02-27"
+---
+
+```{r}
+library(tidyverse)
+library(tidytext)
+```
+
+```{r}
+review <- read.csv('Airline_review.csv')
+head(review)
+names(review)
+dim(review)
+```
+
+## Missing value analysis
+```{r}
+data.frame(Column = names(review),
+           Missing_Count = sapply(review, function(x) 
+             sum(is.na(x) | x == "" | x == "NA")),
+  Missing_Pct = round(sapply(review, function(x) 
+    mean(is.na(x) | x == "" | x == "NA")) * 100, 2)) %>% 
+  arrange(Missing_Pct)
+```
+
+Review Title, Overall Rating, Recommended, and Review have no missing values; no removal needed for incomplete data
+
+## EDA
+```{r}
+review %>%
+  mutate(Overall_Rating = as.numeric(Overall_Rating)) %>%
+  group_by(Airline.Name) %>%
+  summarise(Avg_Rating = round(mean(Overall_Rating, na.rm = TRUE), 2),
+    Review_Count = n()) %>%
+  filter(Review_Count >= 50) %>% arrange(desc(Avg_Rating)) %>% head(15) %>%
+  ggplot(aes(x = reorder(Airline.Name, Avg_Rating), y = Avg_Rating)) +
+  geom_bar(stat = "identity", fill = "slategray3") +
+  labs(title = "Top Airlines by Average Rating", x = "Airline", y = "Average Rating") +
+  coord_flip() + theme_minimal() 
+```
+
+Distribution of ratings:
+```{r}
+ggplot(review, aes(x = Overall_Rating)) + geom_bar(fill = "thistle3") + 
+  labs(title = "Overall Rating Distribution", x = "Rating", y = "Count") +
+  theme_minimal()
+```
+
+Distribution of recommended reviews:
+```{r}
+review %>% count(Recommended) %>% mutate(Percentage = round(n / sum(n) * 100, 2))
+review %>% count(Recommended) %>% mutate(Percentage = round(n / sum(n) * 100, 2)) %>%
+  ggplot(aes(x = Recommended, y = Percentage, fill = Recommended)) +
+  geom_bar(stat = "identity") + theme(legend.position = "none") +
+  scale_fill_manual(values = c("yes" = "lightskyblue3", "no" = "lightpink3")) +
+  labs(title = "Distribution of Recommended Reviews",
+       x = "Recommended", y = "Percentage") + theme_minimal()
+```
+
+Distribution of verified reviews:
+```{r}
+review %>% count(Verified) %>% mutate(Percentage = round(n / sum(n) * 100, 2))
+review %>% count(Verified) %>% mutate(Percentage = round(n / sum(n) * 100, 2)) %>%
+  ggplot(aes(x = Verified, y = Percentage, fill = Verified)) +
+  geom_bar(stat = "identity") + theme(legend.position = "none") +
+  scale_fill_manual(values = c("True" = "lightskyblue3", "False" = "lightpink3")) +
+  labs(title = "Distribution of Verified Reviews",
+       x = "Verified", y = "Percentage") + theme_minimal()
+```
+
+## Text Preprocessing
+Build and clean corpus
+```{r}
+corpus <- Corpus(VectorSource(review$Review))
+length(corpus)
+inspect(corpus[1:3])
+
+toSpace <- content_transformer(function(x, pattern) gsub(pattern, " ", x))
+corpus <- tm_map(corpus, toSpace, "/|@|\\|")
+corpus <- tm_map(corpus, content_transformer(function(x) gsub("air plane", "airplane", x)))
+corpus <- tm_map(corpus, content_transformer(function(x) gsub("flights", "flight", x)))
+corpus <- tm_map(corpus, content_transformer(function(x) gsub("airlines", "airline", x)))
+corpus <- tm_map(corpus, content_transformer(function(x) gsub("check in", "checkin", x)))
+corpus <- tm_map(corpus, content_transformer(tolower))
+corpus <- tm_map(corpus, removeNumbers)
+corpus <- tm_map(corpus, removePunctuation)
+corpus <- tm_map(corpus, removeWords, stopwords("english"))
+corpus <- tm_map(corpus, removeWords, c("will", "one", "us", "get", "even"))
+corpus <- tm_map(corpus, stripWhitespace)
+inspect(corpus[1:3])
+```
+
+Tokenization
+```{r}
+clean.review <- data.frame(X = review$X, Airline.Name = review$Airline.Name,
+  Overall_Rating = as.numeric(review$Overall_Rating), 
+  text = sapply(corpus, as.character), stringsAsFactors = FALSE)
+
+review.tokens <- clean.review %>% unnest_tokens(word, text)
+head(review.tokens, 20)
+```
+
+DTM
+```{r}
+dtm <- DocumentTermMatrix(corpus)
+inspect(dtm[1:5, 1:20])
+dim(dtm)
+```
+
+Remove sparse terms
+```{r}
+dtm <- removeSparseTerms(dtm, 0.99) 
+dim(dtm)
+```
+
+TF-IDF
+```{r}
+dtm_tfidf <- DocumentTermMatrix(corpus, control = list(weighting = weightTfIdf))
+tfidf_scores <- colMeans(as.matrix(dtm_tfidf))
+tfidf_df <- data.frame(word = names(tfidf_scores), tfidf = round(tfidf_scores, 4)) %>%
+  arrange(desc(tfidf))
+head(tfidf_df, 20)
+
+tfidf_df %>% head(20) %>% ggplot(aes(x = reorder(word, tfidf), y = tfidf)) +
+  geom_bar(stat = "identity", fill = "darkseagreen3") +
+  labs(title = "Top 20 Terms by TF-IDF", x = "Term", y = "TF-IDF") +
+  coord_flip() + theme_minimal()
+```
+
+```{r}
+save(review.tokens, clean.review, file = "data/prepared_data.RData")
+```
+
